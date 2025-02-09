@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Video Processing</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f4f4f4;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: row-reverse;
+            width: 90%;
+            max-width: 1200px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .video-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: black;
+            padding: 10px;
+        }
+
+        .video-container img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 5px;
+        }
+
+        .controls {
+            flex: 1;
+            padding: 20px;
+            text-align: left;
+            background: #fff;
+        }
+
+        .filters-container {
+            display: flex;
+            justify-content: space-between; /* ✅ Side-by-side layout */
+            gap: 20px;
+        }
+
+        .filter-box {
+            flex: 1;
+            min-height: 150px;
+            padding: 10px;
+            background: #f9f9f9;
+            border: 2px dashed #ccc;
+            border-radius: 5px;
+        }
+
+        .filter-item {
+            padding: 10px;
+            margin: 5px 0;
+            background: #ddd;
+            border-radius: 5px;
+            cursor: grab;
+            text-align: center;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <!-- Control Panel -->
+    <div class="controls">
+
+        <div class="filters-container">
+            <!-- Available Filters -->
+            <div id="availableFilters" class="filter-box">
+                <h4>Available Filters</h4>
+                {% for effect in effects %}
+                <div class="filter-item" data-filter="{{ effect.name }}">{{ effect.display_name }}</div>
+                {% endfor %}
+            </div>
+
+            <!-- Active Filters -->
+            <div id="activeFilters" class="filter-box">
+                <h4>In Use</h4>
+            </div>
+        </div>
+
+        <div id="sliders">
+            {% for effect in effects %}
+            <div id="{{ effect.name }}_params" class="filter-slider hidden">
+                <h4>{{ effect.display_name }}</h4>
+                {% for param_key, param in effect.parameters.items() %}
+                <label>{{ param.display_name }}:
+                    <input type="range" id="{{ param_key }}"
+                           min="{{ param.min }}"
+                           max="{{ param.max }}"
+                           value="{{ param.value }}"
+                           step="{{ param.step }}"
+                           oninput="updateParams()">
+                </label>
+                <span id="{{ param_key }}_value">{{ param.value }}</span><br>
+                {% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Video Stream -->
+    <div class="video-container">
+        <img src="{{ url_for('video_feed') }}" alt="Live Stream">
+    </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        let availableFilters = document.getElementById("availableFilters");
+        let activeFilters = document.getElementById("activeFilters");
+
+        new Sortable(availableFilters, {group: "filters", animation: 150});
+        new Sortable(activeFilters, {
+            group: "filters",
+            animation: 150,
+            onSort: updateOperations // ✅ Detect reordering
+        });
+    });
+
+    function updateOperations() {
+        let activeFilters = document.getElementById("activeFilters").children;
+        let operations = [];
+
+        for (let i = 1; i < activeFilters.length; i++) { // Skip <h4>
+            operations.push(activeFilters[i].dataset.filter);
+        }
+
+        console.log("New Filter Order:", operations); // Debugging
+
+        fetch('/update_operations', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({operations: operations})
+        }).then(response => response.json())
+            .then(data => console.log("Updated Order on Server:", data));
+
+        // ✅ Show only sliders for active filters
+        document.querySelectorAll(".filter-slider").forEach(slider => {
+            slider.classList.add("hidden"); // Hide all
+        });
+
+        operations.forEach(op => {
+            let paramDiv = document.getElementById(op + "_params");
+            if (paramDiv) {
+                paramDiv.classList.remove("hidden"); // Show matching sliders
+            }
+        });
+    }
+
+    function updateParams() {
+        let params = {};
+        document.querySelectorAll('.filter-slider:not(.hidden) input').forEach(input => {
+            params[input.id] = parseFloat(input.value);
+            document.getElementById(input.id + "_value").textContent = input.value;
+        });
+
+        fetch('/update_params', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(params)
+        });
+    }
+</script>
+
+</body>
+</html>
